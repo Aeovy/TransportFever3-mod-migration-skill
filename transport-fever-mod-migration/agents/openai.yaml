@@ -1,0 +1,4 @@
+interface:
+  display_name: "Transport Fever Mod Migration"
+  short_description: "Migrate TF2 mods to TF3 and validate assets, scripts, and platforms"
+  default_prompt: "Use $transport-fever-mod-migration to analyze and migrate the current TF2 mod to TF3, preserve the source package, and produce an installable package with a validation report."
