@@ -1,65 +1,65 @@
-# CR200J 本地迁移实例
+# CR200J Local Migration Case Study
 
-初次实测日期：2026-10-04；macOS，Transport Fever 3 Model Editor v13。下方数量、编辑器结果和打包大小对应 revision 1。源包约 1.6 GB，最终目录约 1 GB。本实例用于识别类似故障，不是通用修复模板。原始证据在对应项目的 `docs/cr200j-migration.md`、`docs/validation/`、`docs/images/` 与 `tools/` 中；技能可独立阅读，不依赖这些文件在复用环境中存在。
+First tested on 2026-10-04 on macOS with Transport Fever 3 Model Editor v13. Counts, editor results, and package sizes below describe revision 1 unless otherwise stated. The source was about 1.6 GB and the final directory about 1 GB. Use this case to recognize similar failures, not as a universal repair template. Original evidence lives in the source project's `docs/cr200j-migration.md`, `docs/validation/`, `docs/images/`, and `tools/`. Those project files are not required to understand or reuse this reference.
 
-## 保护辅助模块与 UV 索引
+## Protection Helpers and UV Indices
 
-源包包含 20 个 Lua 5.2 字节码辅助模块；14 个网格描述符用其中的模块计算 UV 索引偏移。`.msh.blob` 本身仍是可检查的普通网格数据。
+The source contained 20 Lua 5.2 bytecode helper modules. Fourteen mesh descriptors used them to calculate UV-index offsets. The `.msh.blob` files remained ordinary inspectable mesh data.
 
-根据已核实的连续 uint32 小端索引区布局重建常量。这里的 offset、描述符 count 都以字节为单位，`indexByteCount` 不是索引元素个数：
+Constants were reconstructed from verified contiguous little-endian uint32 index regions. Both offsets and descriptor counts here are measured in bytes; `indexByteCount` is not a count of index elements:
 
-- 一类网格：`normalOffset = positionOffset + 2 × indexByteCount`，对应 `uvOffset = positionOffset + indexByteCount`。
-- 一类广告/蒙皮布局：`uvOffset = tangentOffset + indexByteCount`，同样先验证实际区间与顶点属性。
+- One mesh class: `normalOffset = positionOffset + 2 × indexByteCount`, corresponding to `uvOffset = positionOffset + indexByteCount`.
+- One advertisement/skinning layout: `uvOffset = tangentOffset + indexByteCount`, after checking actual ranges and vertex attributes.
 
-没有执行或反编译这些字节码。所有索引区与上界逐项检查，之后核对贴图效果。第二条不是对未知布局的默认 else 分支；对其他模型必须重新证明排列、单位与属性数量。真正加密且不可读取的几何没有在这个包中出现，本实例不能证明这类资源可迁移。
+The bytecode was neither executed nor decompiled. All index regions and upper bounds were checked individually, followed by texture inspection. The second rule is not a default else branch for unknown layouts. Other models require new proof of ordering, units, and attribute counts. This package did not contain genuinely encrypted unreadable geometry, so the case provides no evidence that such geometry can be migrated.
 
-## 资源与行为修复
+## Asset and Behavior Repairs
 
-| 问题 | 本次处理 | 复用边界 |
+| Issue | Repair in this case | Reuse boundary |
 | --- | --- | --- |
-| `shuipai2.blob` 不符合伴随文件名 | 核实后补为 `shuipai2.msh.blob` | 先确认同一网格，不按近似名称盲配 |
-| 二等座车轴路径、反向动力车 LOD 配置缺失 | 对照同系列正确模型逐层修复 | 各层实际节点/网格仍需分别核实 |
-| `2.tga` 实应指向 `2_normal.tga` | 修正广告牌法线引用 | 不靠名称推断全部贴图角色 |
-| 缺少通用白色灯光纹理 | 使用 16×16 白色替代纹理 | 替代已披露，不能替代真实涂装 |
-| 同名 DDS/TGA 实为两套涂装 | TGA 输出 `*_from_tga.dds`，更新材质 | 转换前检测冲突 |
-| TGA 转 DDS 方向错误 | 在本工具链中上下翻转 TGA | 已有 DDS 不跟着翻转 |
-| 旧分组名/空引用无效 | 指向真实原生 ZE 模型或移除空引用 | 不改动无关有效分组 |
-| 缺失 `CH_25K`、`CH_25K_SLM` 音效 | 暂用原版客车声音 | 不声称复现完整自定义音效 |
-| 最远层缺少车轴节点 | 按节点树设置动画截止层 | 不给全部车辆统一截止值 |
+| `shuipai2.blob` had the wrong companion name | Added verified `shuipai2.msh.blob` | Confirm the same mesh; do not pair by approximate names |
+| Missing second-class wheel path and reversed power-car LOD configuration | Repaired each level against correct sibling models | Verify actual nodes/meshes at every level |
+| `2.tga` should reference `2_normal.tga` | Corrected advertisement normal reference | Do not infer all texture roles from names |
+| Missing generic white lamp texture | Supplied a 16×16 white substitute | Disclosed substitute, not a replacement for real livery |
+| Same-name DDS/TGA represented different liveries | Wrote TGA output as `*_from_tga.dds` and updated materials | Detect collisions before conversion |
+| Wrong TGA-to-DDS orientation | Vertically flipped TGA in this toolchain | Did not flip existing DDS files |
+| Invalid old group names/empty references | Used actual native ZE models or removed empty references | Preserved unrelated valid groups |
+| Missing `CH_25K` and `CH_25K_SLM` sounds | Temporarily used native passenger-car audio | Did not claim complete custom-audio reproduction |
+| Missing wheel nodes at the farthest LOD | Derived animation cutoff from the tree | Did not apply one cutoff to all vehicles |
 
-保留车辆性能、年代与几何。四套原编组实际为 8、11、8、11 辆；名为“12X”的两套原数据只有 11 辆，本次没有擅自补车。反向动力车已有根旋转，朝向没有再次反转。
+Vehicle performance, availability years, and geometry were preserved. The four original formations actually contained 8, 11, 8, and 11 cars. Both named “12X” contained only 11 cars; no extra car was invented. Reversed power cars already had root rotations and were not flipped again.
 
-输出资源文件名小写，文本 UTF-8 无 BOM；但一些旧资源名仍含中文或空格。编辑器接受了这些名称，严格按当前官方命名指导发布时仍应建立显式映射继续规范化。不能将本实例描述成已满足所有发布要求。
+Output filenames were lowercase and text was UTF-8 without BOM, but some legacy names still contained Chinese characters or spaces. The editor accepted them; strict publication compliance still requires explicit mapping and normalization. This case did not satisfy every publication requirement.
 
-## 结果与限制
+## Results and Limits
 
-最终包含 12 个原生模型、120 对网格/二进制、81 个材质、78 个动画、150 个 DDS、48 个 UI TGA 和 4 个编组。源包保持不变。
+Final revision-1 assets: 12 native models, 120 mesh/binary pairs, 81 materials, 78 animations, 150 DDS textures, 48 UI TGA files, and 4 formations. The source package remained unchanged.
 
-| 验证 | 实际结果 |
+| Validation | Actual result |
 | --- | --- |
-| 专用静态检查 | 通过：引用、索引、参与动画的 LOD 节点、编组与定义 |
-| 编辑器完整检查 | 失败：12 个均完成检查，2 个餐车通过，10 个最远 LOD 超限 |
-| 编辑器视觉预览 | 已预览两套动力车涂装与硬卧开门动画，非所有组合 |
-| 游戏运行 | 未完成；用户随后要求不打开游戏，停止主游戏尝试 |
-| Windows 运行 | 未运行 |
-| ZIP | 617 条目，135180361 字节，全量 CRC 通过 |
+| Dedicated static checks | Passed references, indices, animated LOD nodes, formations, and definitions |
+| Full editor validation | Failed: all 12 checked; 2 dining cars passed, 10 exceeded farthest-LOD limits |
+| Editor visual preview | Two power-car liveries and hard-sleeper door animation previewed; not all combinations |
+| Game execution | Incomplete; the user subsequently prohibited opening the game, ending main-game attempts |
+| Windows execution | Not run at this stage |
+| ZIP | 617 entries, 135180361 bytes, all CRCs passed |
 
-10 个超限模型：4 个动力车约 1.8 MB、2 个二等座 847.6 KB、2 个软卧 291.5 KB、2 个硬卧 297.8 KB；v13 最远 LOD 限额为 256 KB。后续应真正简化远景几何，本次没有为绕过限制删层。
+The 10 oversized models were 4 power cars at about 1.8 MB, 2 second-class cars at 847.6 KB, 2 soft sleepers at 291.5 KB, and 2 hard sleepers at 297.8 KB. The v13 farthest-LOD limit was 256 KB. Real distant-geometry simplification remained necessary; levels were not deleted to evade the limit.
 
-编辑器 v13 两项局部观察：转换实际输出落在当前工具栏模组；有模型打开时 Bulk Validation 触发 `m_modelId < 0`，重启并保持空模型后成功完成。复用时先核对版本和症状。
+Two local v13 observations: conversion output went into the current toolbar mod; Bulk Validation asserted `m_modelId < 0` with a model open but completed after restarting with no model loaded. Verify version and symptoms before reusing either observation.
 
-CR200J 项目的准备、整合和验证工具包含特定 ID、车辆类型和数量假设，不能直接作为通用转换器。附带的技能盘点脚本仅提供通用只读检查，没有沿用这些固定计数或禁止模块导入的规则。
+The project's preparation, integration, and validation tools assume specific IDs, vehicle types, and counts. They are not general converters. The bundled inventory script provides general read-only checks without those fixed counts or a blanket ban on module imports.
 
-## 后续 Windows 反馈与透明度修复
+## Later Windows Feedback and Opacity Repairs
 
-用户随后在 Windows 实际测试，报告基本正常，但整片车体像毛玻璃，能看到另一侧场景。游戏版本、车型覆盖和存档检查未记录；这是基本加载及视觉异常的用户证据，不是完整兼容性验收。
+The user subsequently tested on Windows and reported basic operation, but the whole body looked frosted and exposed the scene behind it. Game version, vehicle coverage, and save checks were not recorded. This is user evidence of basic loading and a visual defect, not full compatibility acceptance.
 
-源包多数实体部件也采用透明材质。旧整合脚本统一开启 sorted，进一步将整片车壳/轮对放入透明排序。检查发现动力车车壳在转换前后 alpha 都为 254–255，独立玻璃为 127，客车 atlas 则混合了车壳和窗口；不能将症状简单归因于全部贴图 alpha 被错误转换。
+Many solid source parts already used transparent materials. The old integration script enabled sorting globally, putting bodies and wheelsets on the transparent sorting path. Inspection found power-car body alpha of 254–255 both before and after conversion, separate glass at 127, and passenger atlases mixing body and windows. The symptom could not be reduced to universally incorrect alpha conversion.
 
-revision 2 对 34 个近乎全不透明的材质使用 PHYSICAL / PHYSICAL_NRML_MAP，并同时改为 map_albedo + albedoTex；28 个混合车壳/窗口 atlas 使用 cutout 覆盖和非排序路径；2 个独立玻璃保留半透明。63 个材质实际修改，1 个玻璃原本已符合设置。纹理、几何和车辆行为数据均未改动。
+Revision 2 changed 34 almost-opaque materials to `PHYSICAL` / `PHYSICAL_NRML_MAP` with `map_albedo` + `albedoTex`; used cutout coverage and an unsorted path for 28 mixed body/window atlases; and retained 2 semitransparent glass materials. It changed 63 materials because one glass material already matched. Textures, geometry, and vehicle behavior were unchanged.
 
-revision 2 之后，用户截图仍显示少量区域能透过车体看到背景，因此 revision 2 不能作为问题已解决的结论。revision 3 将 6 个 `*_body_albedo_opacity.mtl` 从透明材质改为 `PHYSICAL` / `PHYSICAL_NRML_MAP`，并把纹理绑定从 `map_albedo_opacity` + `albedoOpacityTex` 改为 `map_albedo` + `albedoTex`。法线和 MGA 贴图保持不变；独立玻璃继续使用透明材质，其他混合部件保留 cutout。目标 atlas 的 alpha 范围为 125-255，纹理、几何、UV 和车辆行为没有修改。
+User screenshots after revision 2 still showed background through small body areas, so that revision did not establish resolution. Revision 3 changed six `*_body_albedo_opacity.mtl` materials to `PHYSICAL` / `PHYSICAL_NRML_MAP` and migrated bindings from `map_albedo_opacity` + `albedoOpacityTex` to `map_albedo` + `albedoTex`. Normal/MGA textures were preserved; separate glass stayed transparent and other mixed parts retained cutout. Target atlas alpha ranged from 125–255. Textures, geometry, UVs, and behavior were unchanged.
 
-用户随后在 Windows 游戏中确认 revision 3 的透明问题已完全解决。最终 ZIP 为 `cr200j_tf3_1.zip`，SHA-256 为 `6d6b8c8605bdf51dcb6dd3e25a4af3f83873940fd67fd040304677ff536963ca`，617 个条目 CRC 检查通过；agent 没有启动游戏。该结果是此 CR200J 资源组合的用户实测证据，不是“凡是 `_body_` 材质都应强制不透明”的通则。若其他模组把窗户 alpha 放在同一车体材质中，强制不透明可能封住玻璃；必须检查模型、UV、atlas 和目标游戏效果。更可控的通用方案是在源工程拆分实体车壳和玻璃材质。
+The user confirmed that revision 3 fully resolved the reported transparency in the Windows game. The final `cr200j_tf3_1.zip` had SHA-256 `6d6b8c8605bdf51dcb6dd3e25a4af3f83873940fd67fd040304677ff536963ca` and 617 CRC-verified entries. The agent did not launch the game. This is evidence for this CR200J asset combination, not a rule to make every `_body_` material opaque. Shared body/window alpha in other mods may require transparency; forcing opacity can seal glass. Inspect models, UVs, atlases, and target-game appearance. Splitting solid shells and glass in the source project is a more controlled general approach.
 
-透明材质与覆盖模式的官方依据见[材质文档](https://wiki.transportfever3.com/doku.php?id=modding:general:resourcetypes:mtl)。本项目修复过程见 `docs/opacity-repair.md` 及 `docs/validation/opacity-repair-revision3.json`；这些项目路径不会随 skill 安装，复用时以本文件记录的结果为准。
+See the [official material documentation](https://wiki.transportfever3.com/doku.php?id=modding:general:resourcetypes:mtl) for transparency and coverage. Detailed project history was recorded in `docs/opacity-repair.md` and `docs/validation/opacity-repair-revision3.json`. These are project-local records, not files installed with the skill; use this reference's recorded results when reusing it.

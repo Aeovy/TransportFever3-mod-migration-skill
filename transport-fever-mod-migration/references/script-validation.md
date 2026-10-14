@@ -1,36 +1,36 @@
-# 脚本迁移的离线验证、回归与交付
+# Offline Script Validation, Regression, and Delivery
 
-适用于 [脚本迁移](script-migration.md) 与 [React GUI](tf3-react-gui.md)。最后核对：2026-10-04。命令中的路径由当前安装和工作目录确定，不把本案例的主机路径作为其他机器的默认值。
+Use with [Script Migration](script-migration.md) and [React GUI](tf3-react-gui.md). Last checked: 2026-10-04. Resolve command paths from the current installation and work directory rather than copying a case study's machine paths.
 
-## 1. 明确每层检查能证明什么
+## 1. Define What Each Check Proves
 
-| 检查层 | 能发现 | 不能据此证明 |
+| Layer | Detects | Does not prove |
 | --- | --- | --- |
-| JSON、路径、导出核对 | manifest、资源入口、编码、大小写、重复 ID、缺失依赖 | 引擎成功加载资源 |
-| Lua `loadfile` / `luac -p` | 被检查 `.lua` 的语法 | `.tl` 合法、回调运行、GUI 契约 |
-| Teal 解析与生成 Lua | Teal 语法与指定目标 Lua 转译 | 完整类型通过、TF3 全部 API 可用 |
-| 配置完整定义的 Teal 类型检查 | 类型、未定义变量、签名等静态问题 | 原生节点类别、渲染效果、存档行为 |
-| 限定宿主回调检查 | 所建模的导入、入口、布局约束、打开/刷新/关闭 | 真正 engine userdata、C++ 变换器、完整模拟端 |
-| 目标游戏的样式解析器 | 选择器实际被怎样解析、是否失去类/ID 过滤 | 原生匹配、布局和屏幕效果 |
-| 获准的实际游戏操作 | 被实际覆盖的加载、原界面、窗口、数据与存档行为 | 未测版本/系统/场景的行为 |
-| ZIP CRC 和 SHA-256 | 文件传输完整性及包身份 | 模组功能正确 |
+| JSON, paths, exports | Manifest, entry points, encoding, case, duplicate IDs, missing dependencies | Successful engine loading |
+| Lua `loadfile` / `luac -p` | Syntax of checked `.lua` files | Valid Teal, working callbacks, GUI contracts |
+| Teal parsing and Lua generation | Teal syntax and transpilation to the selected Lua target | Complete type correctness or all TF3 APIs |
+| Teal checking with complete definitions | Types, undefined variables, signatures | Native node categories, rendering, save behavior |
+| Constrained host callbacks | Modeled imports, entries, layout rules, open/refresh/close | Real engine userdata, C++ transformer, complete simulation |
+| Target game's style parser | Actual selector parsing and lost class/ID filters | Native matching, layout, screen appearance |
+| Authorized game operation | Actually covered loading, base UI, windows, data, saves | Untested versions, systems, or scenarios |
+| ZIP CRC and SHA-256 | Transfer integrity and package identity | Correct mod behavior |
 
-Model Editor 能验证模型资源，不执行这类主游戏 React GUI。纯脚本模组标记“不适用”，不要把 Model Editor 能启动当作 GUI 已测试。
+Model Editor validates model assets, not this main-game React GUI. Mark script-only mods `not applicable`; starting Model Editor is not GUI testing.
 
-用户禁止打开游戏时不通过后台进程、Steam URI、热重载或其他途径绕过。继续可进行的离线检查；游戏栏写“未运行”，并提供具体待测操作。
+When game launch is prohibited, do not bypass the restriction with background processes, Steam URIs, hot reloads, or other routes. Continue offline checks, record game results as `not run`, and provide concrete remaining test steps.
 
-## 2. 固定检查输入与工具来源
+## 2. Fix Inputs and Tool Provenance
 
-保留原模组，以只读盘点工具的 `--hash` 生成迁移前快照；修改全部在独立副本。需要证明原包未变时，另生成迁移后快照并比较文件列表与散列，不能把原包与自身同一份报告比较。
+Preserve the source and use read-only inventory with `--hash` for a before snapshot. Edit independent copies. To prove preservation, create an after snapshot and compare file lists and hashes; comparing a report with itself proves nothing.
 
-记录目标 API 来源、插件虚拟入口、revision、被测试模块/样式的散列和实际运行命令。小工具输出也写明“未测原生渲染”。依赖可从本机读取，技能包不携带游戏原生源码或下载的第三方编译器副本。
+Record API provenance, plugin virtual entry, revision, tested module/style hashes, and actual commands. Helper output must also state that native rendering was not tested. Read dependencies locally; do not bundle native game source or downloaded third-party compiler copies in the skill.
 
-使用 Teal 时记录实际编译器版本和散列。这不是 TF3 内置编译器版本声明；不要把下载失败的 HTML/部分文件当作编译器，其他版本应另记版本和散列。
+Record the actual Teal compiler version and hash. This does not establish TF3's bundled compiler version. Verify downloads are Lua source rather than an HTML error or partial file; record other versions separately.
 
-以下示例只准备离线工作区，三个变量均为任务路径：
+Prepare the offline workspace using task-specific paths:
 
 ```sh
-skill_root='/Users/aeovy/.codex/skills/transport-fever-mod-migration'
+skill_root='/path/to/transport-fever-mod-migration'
 tf3_root='/path/to/Transport Fever 3'
 probe_dir='/path/to/work/script-probes'
 mkdir -p "$probe_dir"
@@ -38,7 +38,7 @@ unzip -p "$tf3_root/base/content/gui.zip" gui/main/stylesheetutil.lua \
   > "$probe_dir/stylesheetutil.lua"
 ```
 
-如果缺少编译器，可从官方仓库取得并核对散列；运行前确认输出是 Lua 源码：
+If the compiler is missing, obtain it from the official repository and check its hash and source before execution:
 
 ```sh
 curl --fail --location --connect-timeout 5 --max-time 30 \
@@ -48,27 +48,27 @@ curl --fail --location --connect-timeout 5 --max-time 30 \
 shasum -a 256 "$probe_dir/tl.lua" "$probe_dir/stylesheetutil.lua"
 ```
 
-本案例解析器来自本机 `gui.zip`，当次散列为 `411a00603da7bcd11b242395e615129109e4ff64237bd903b6cf7f3c22026a23`。该值仅标识当次版本，不要求其他游戏版本一致。
+The parser extracted from the case study's local `gui.zip` had SHA-256 `411a00603da7bcd11b242395e615129109e4ff64237bd903b6cf7f3c22026a23`. It identifies that version only; other game versions need not match.
 
-`.lua` 描述符另做语法检查，`.tl` 不能交给 `luac -p`。对有 GUI 或脚本入口的迁移，编写只覆盖实际资源入口和宿主契约的限定检查；不要用“任何方法都返回成功”的假宿主。
+Check `.lua` descriptor syntax separately; do not pass `.tl` to `luac -p`. For GUI/script migrations, build constrained checks around actual resource entries and host contracts. Do not use a mock host where every method returns success.
 
-## 3. 针对性回归与实际 GUI 测试
+## 3. Targeted Regression and Native GUI Tests
 
-先用历史错误或最小临时副本证明新检查器能捕获目标缺陷，核实错误内容后再运行修复版本。缺失文件、工具下载失败或任意非零退出都不能算作成功捕获缺陷。
+First demonstrate that a new checker detects its intended defect using a historical failure or minimal temporary faulty copy. Verify the actual error before testing the repair. Missing files, failed downloads, or arbitrary nonzero exits do not count as successful defect detection.
 
-按实际功能选择游戏测试顺序：
+Choose game tests based on implemented features:
 
-1. 完整替换旧模组，确认实际 `modId`、revision、资源散列；排除同 ID 的另一路径遮蔽。
-2. 启用后观察原主界面、窗口尺寸、位置和鼠标焦点，确认自有样式没有泄漏到基础界面。
-3. 操作目标功能的打开、关闭、重开、刷新、缩放和错误路径；只记录实际覆盖的场景。
-4. 如果新增持久状态或模拟逻辑，再测试暂停/继续、新建、保存/加载、切图、事件去重与状态升级。
-5. 在目标 Windows 版本分别验证，不把 macOS 离线或编辑器结果代替 Windows 游戏结果。
+1. Fully replace the old mod, confirm actual `modId`, revision, and resource hashes, and rule out same-ID shadow copies.
+2. After enabling, inspect the original interface, window size/position, and mouse focus for leaked styles.
+3. Exercise open, close, reopen, refresh, zoom, and error paths. Report only covered scenarios.
+4. When persistent state or simulation logic was added, test pause/resume, new game, save/load, map changes, event deduplication, and state upgrades.
+5. Verify separately on the target Windows version; macOS offline/editor results do not substitute for Windows game results.
 
-出现重载次数限制时先修复根因，再由获准的测试者重启。保留真实错误栈、版本和截图；不要清日志或忽略异常后宣称通过。纯信息窗口没有保存状态时无需强行增加模拟生命周期实现或测试。
+For reload limits, repair the cause before an authorized tester restarts. Keep real stacks, versions, and screenshots; do not clear logs or suppress exceptions and claim success. A purely informational window with no persisted state does not need an invented simulation lifecycle or its tests.
 
-## 6. 从被测试源目录生成包
+## 4. Package the Tested Source Directory
 
-使用 [打包工具](../scripts/package_mod.py)，明确指定源目录和外部输出位置：
+Use the [packaging helper](../scripts/package_mod.py) with an explicit source and external output:
 
 ```sh
 uv run --with 'pydantic>=2.11,<3' --with 'pillow>=11,<13' python \
@@ -77,15 +77,15 @@ uv run --with 'pydantic>=2.11,<3' --with 'pillow>=11,<13' python \
   --archive /path/to/dist/my_mod.zip
 ```
 
-工具要求 `mod.json`、`content/`；可见模组还需可解码的 `_metadata/0.png`，封面迁移或明确例外见 [封面说明](mod-cover.md)。它生成一个模组根目录，检查 ZIP CRC，旁写 `.zip.sha256` 与 `.package.json`。它排除 `.DS_Store` / `__MACOSX`，拒绝文件符号链接和隐藏文件；并不自动识别所有开发日志、缓存或错误资源。先整理交付源目录，包内不得混入无关文件。
+The helper requires `mod.json` and `content/`; visible mods also require a decodable `_metadata/0.png`. See [Cover Migration](mod-cover.md) for conversion and explicit exceptions. It writes a single mod root, verifies ZIP CRCs, and creates `.zip.sha256` and `.package.json` sidecars. It excludes `.DS_Store` / `__MACOSX` and rejects file symlinks and hidden files. It cannot identify every development log, cache, or incorrect asset; clean the delivery source first.
 
-修改逻辑或样式后按项目规则更新 revision，重新运行受影响的检查，从同一个目录打包。解压到新工作目录，比较文件列表与源散列，检查没有多层错误目录，必要时对解压内容重跑入口/样式测试。安装副本与被测内容必须一致。
+After logic/style changes, increment revision according to project rules, rerun affected checks, and package that same directory. Extract into a fresh directory, compare file lists and hashes, check root nesting, and rerun entry/style checks on extracted content when needed. The installed copy must match the tested files.
 
-ZIP 已存在不代表它已更新；最终报告给出包 SHA-256。禁止把旧 ZIP、后来修改的源和过时验证报告组合交付。不要恢复用户明确删除的生成目录，除非本任务确实需要且已说明。
+An existing ZIP is not evidence that it was rebuilt. Report its final SHA-256. Never combine an old ZIP, later source edits, and stale validation results. Do not recreate generated directories explicitly deleted by the user unless the current task needs them and this has been explained.
 
-## 7. 报告字段与状态用法
+## 5. Report Fields and Statuses
 
-区分 agent 离线结果、用户实际反馈和未覆盖功能。可以按下面结构记录，实际替换字段值，不生成假的证据：
+Distinguish agent offline results, user-reported observations, and uncovered features. Replace the example values with actual evidence:
 
 ```json
 {
@@ -109,4 +109,4 @@ ZIP 已存在不代表它已更新；最终报告给出包 SHA-256。禁止把�
 }
 ```
 
-每项通过对应命令或实际操作证据，失败保留原因，未运行写明范围。在 Git 项目中按实质阶段提交工具、模板和文档，使用具体路径，保留其他任务的变更。向平台发布不属于一般迁移授权。
+Every pass requires command or observed-operation evidence. Retain failure reasons and state unrun coverage. Commit substantive tool/template/documentation stages using explicit paths in Git projects and preserve unrelated changes. Publishing is outside ordinary migration authorization.

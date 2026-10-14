@@ -1,58 +1,58 @@
-# 电子水牌种别正常、目的地空白或错位
+# Destination Displays: Service Type Visible, Destination Blank or Misplaced
 
-## 先区分文字来源
+## Identify the Text Source
 
-水牌网格、滚动动画和贴图存在，不代表目的地也在贴图里。E2 / E5 / E6 / H5 的 `roll*empty*` 纹理提供种别（例如「はやて / HAYATE」）和空白显示区，站名由模型 `metadata.labelList.labels` 中的 `NEXT_STOP` 生成。删除整个 `labelList` 会留下种别，但使站名必然消失。
+Display meshes, scrolling animations, and textures do not prove that destinations are baked into textures. E2 / E5 / E6 / H5 `roll*empty*` textures provide service types such as HAYATE and a blank display region. Station names come from `NEXT_STOP` in `metadata.labelList.labels`. Deleting all of `labelList` preserves the service type but removes station names.
 
-旧版 skill 曾建议“有原始水牌资源就删除 labelList”。这条建议已撤回：它把两种互补的内容误认为重复内容。若正在排查迁移回归，应重新核对源资源、生成包和目标版本，而不是把旧建议当作结论。
+An older skill advised deleting `labelList` when original display assets existed. That advice is withdrawn: it confused complementary content with duplicates. For regressions, recheck source assets, final packages, and the target version instead of relying on that old conclusion.
 
-| 症状 | 优先核查 |
+| Symptom | First checks |
 | --- | --- |
-| 种别存在，旁边站名空白 | 源/成品 `NEXT_STOP` 数量，构建脚本是否删除标签，游戏列车是否有线路和下一站 |
-| 站名跑到车体或相反方向 | `size` 与变换基向量的缩放、`childId`、车体/根节点变换、水牌网格位置 |
-| 玻璃上出现“火车”等文字 | 检查是否为源作者用于车号的 `NAME`；只处理已确认不需要的这一类标签 |
-| 整块水牌或灯面随时段消失 | 材质 shader 的时间条件、动画和 LOD；这是另一条诊断路径 |
+| Service type visible, adjacent station blank | Source/final `NEXT_STOP` counts, build-time label deletion, assigned line and next stop |
+| Station text on the body or facing incorrectly | `size`, transform basis scaling, `childId`, root/body transforms, display mesh position |
+| Vehicle-name text such as “Train” on glass | Whether the source author used `NAME` for vehicle numbering; remove only confirmed unwanted labels |
+| Entire display or lamp surface disappears by time of day | Shader time conditions, animation, LOD; investigate separately |
 
-`NEXT_STOP` 沿用原模组的“下一站”语义，不自动等于线路终点。不要用固定“东京”等字符串伪装动态功能恢复。
+`NEXT_STOP` retains next-stop semantics and is not automatically the route terminus. Do not fake a restored dynamic feature with a fixed name such as Tokyo.
 
-## 依据当前原生车辆适配
+## Adapt Against Current Native Vehicles
 
-2026-10-07 检查本机 TF3 Model Editor v13 随附资源：
+Local TF3 Model Editor v13 resources inspected on 2026-10-07:
 
-- `base/content/vehicle/train/tgv_duplex.zip` 中的 `tgv_duplex/tgv_middle1.mdl`：目的地 `size = {39.8, 12.4}`，变换基向量尺度为 `0.01`，绑定 `middle1_body`。
-- `re_450.zip` 中的 `re_450/re_450_back.mdl`：目的地 `size = {97.5, 12.6}`，基向量尺度 `0.01`，绑定 `back_body`。
-- `model_editor.zip` 的 `model_editor/meta_metadata.lua` 仍声明 `NEXT_STOP`、`childId`、`size`、`transf`、`fitting` 和 `renderMode`。
-- 本例官方旧版转换结果把源模型 `size = {0.4, 0.14}` 与单位变换原样带入，并未采用上述原生布局约定。
+- `tgv_duplex/tgv_middle1.mdl` in `base/content/vehicle/train/tgv_duplex.zip`: destination `size = {39.8, 12.4}`, transform basis scale `0.01`, bound to `middle1_body`.
+- `re_450/re_450_back.mdl` in `re_450.zip`: destination `size = {97.5, 12.6}`, basis scale `0.01`, bound to `back_body`.
+- `model_editor/meta_metadata.lua` in `model_editor.zip` still declares `NEXT_STOP`, `childId`, `size`, `transf`, `fitting`, and `renderMode`.
+- In this case, official legacy conversion retained source `size = {0.4, 0.14}` and identity transforms instead of adopting these native layout conventions.
 
-对本例从未经修改的 TF2 标签重新生成：将 `size` 两维乘 100，将 `transf` 的前三列乘 0.01；保留平移及最后一个齐次元素。这样布局区域变为 `{40,14}`，而模型中的物理宽高仍为 `0.4 × 0.14` 米。保留 `fitting = "SCALE"`、原色、对齐和源渲染模式。部分 E2 标签原本为 `STD`，不能一律改为发光模式。
+Regenerate this case's labels from unmodified TF2 data: multiply both `size` dimensions by 100 and the first three transform columns by 0.01; preserve translation and the final homogeneous element. Layout dimensions become `{40,14}` while physical dimensions remain `0.4 × 0.14` meters. Preserve `fitting = "SCALE"`, original color, alignment, and render mode. Some E2 labels were originally `STD`; do not change all labels to emissive rendering.
 
-这是本例采用的原生资源约定，不是所有模型都必须乘 100 的 schema 规则。先检查最终模型是否已经转换；重复执行从原包重建，避免累计缩放。其他比例也需保持物理矩形不变，并进行渲染验证。
+This is a native-resource convention used for this case, not a universal schema requirement to multiply by 100. Check whether final models are already converted and rebuild from the source on repeat runs to prevent accumulated scaling. Other scale choices must also preserve physical rectangles and undergo rendering checks.
 
-## 文字坐标和车体绑定
+## Coordinates and Body Binding
 
-本例所有近景模型都有唯一的 `body` 节点，其局部变换为单位矩阵。目的地坐标处在车体局部空间，因此绑定 `childId = "body"`。其中 15 个车辆模型的根节点旋转了 180°；绑定让文字随车体和水牌使用同一变换链。
+Every near-LOD model in this case had one `body` node with an identity local transform. Destination coordinates were in body-local space, so `childId = "body"` was appropriate. Fifteen vehicle models had 180-degree root rotations; binding put text, body, and display on the same transform chain.
 
-其他车型不能直接填写 `body`：确认实际节点名、节点局部变换、层级和坐标空间。已有非单位变换时，应把文字变换转换到目标节点局部空间，避免多转一次或重复平移。不能绑定到用于循环滚动或开关隐藏的水牌子节点，否则文字会跟随该动画移动。
+Do not assume another vehicle uses `body`. Verify its actual node name, local transform, hierarchy, and coordinate space. Convert text into target-node local space when transforms are nonidentity to avoid duplicate rotation or translation. Do not bind to scrolling or visibility-animated display children, which would animate the text too.
 
-原包坐标也可能错。本例 `e2_0_as/01.mdl` 与 `ba.mdl` 的源标签 X 约为 `-7`，而水牌局部中心为 `2.805`。经网格顶点核实，并对照相同水牌布局的 `fr/08`，两侧标签 X 分别修复为 `2.71/2.89`。这些数值只适用于这两个模型，不是 E2 通用偏移。
+Source coordinates can also be wrong. In `e2_0_as/01.mdl` and `ba.mdl`, source label X was approximately `-7` while the display's local center was `2.805`. Mesh vertices and equivalent `fr/08` layouts supported correcting the two sides to X `2.71/2.89`. These numbers apply only to those two models, not every E2.
 
-## 离线验证与实机验证分开
+## Separate Offline Geometry from Runtime Validation
 
-至少检查：
+At minimum, verify:
 
-1. 源/成品目的地数量匹配；只删除有明确依据的 `NAME` 等标签，不能把“不含 labelList”作为通过条件。
-2. 原标签与转换标签的四角物理坐标一致；明确记录修复原包错误的例外。
-3. 累积根节点和车体变换，将文字四角与实际 `.msh.blob` 水牌顶点比较。覆盖左右侧和旋转车厢，确认文字区域留在屏幕范围内。
-4. 保留滚动贴图、材质、动画与物理边界；构建后检查最终 ZIP 中的标签，而不只检查工作目录。
-5. 重复运行不再改变资源；用删除标签、保留旧尺寸、解绑车体和移出屏幕等故障样例验证检查器能报错。
-6. Model Editor 检查字体实际落点和裁切；游戏把列车分配到有下一站的线路后观察站名及更新。编辑器没有线路上下文时的空白不能单独证明运行时失效。
+1. Source/final destination counts match. Remove `NAME` or other labels only with explicit evidence; absence of `labelList` is not a pass condition.
+2. Original and converted physical rectangle corners agree, with explicit exceptions for repaired source errors.
+3. Accumulate root/body transforms and compare text corners with actual `.msh.blob` display vertices. Cover both sides and rotated cars; text must stay inside the display.
+4. Preserve scrolling textures, materials, animations, and physical bounds. Inspect labels inside the final ZIP, not only the work directory.
+5. Repeated runs do not keep changing assets. Fault cases must detect deleted labels, retained old dimensions, removed body bindings, and off-screen placement.
+6. Inspect font position and clipping in Model Editor, then station names and updates in game on a line with a next stop. Editor blankness without a route context alone does not prove runtime failure.
 
-本次 E2 的 74 个模型/148 处目的地、E5/E6/H5 的 21 个模型/42 处目的地已通过离线几何和资源检查，四类故障回归被拒绝。编辑器能截图，但 computer use 点击报 `windowNotFoundAtPosition`，未完成最终渲染检查；修复包的游戏与 Windows 结果尚待复测。不能把这份参考中的适配方案标注为实机已验证。
+The case's E2 set covered 74 models / 148 destinations; E5/E6/H5 covered 21 models / 42 destinations. Offline geometry and resource checks passed and all four fault categories were rejected. Screenshots were available, but computer-use clicks failed with `windowNotFoundAtPosition`, preventing final rendering validation. Repaired-package game and Windows results still required retesting. Do not label this method runtime-verified.
 
-本项目可复用工具：`tools/vehicle_destination_labels.py` 负责从原包恢复标签，`tools/check_destination_labels.py` 负责独立几何检查；它们依赖本项目的资源读取与网格工具，不是独立可执行的通用 skill 脚本。
+Project-local helpers were `tools/vehicle_destination_labels.py` for restoration and `tools/check_destination_labels.py` for independent geometry checks. They depend on that project's asset/mesh utilities and are not standalone bundled skill scripts.
 
-## 全屏消失时另查材质时间门控
+## Whole-Display Disappearance: Check Material Time Gates
 
-本机 `rendering/programs/shaders/mat/fs/normal/emissive.fs` 会在时间范围外丢弃整个发光表面；`rendering/properties.zip` 的 `properties/emissive_scale.prop.lua` 默认 `fromTime/toTime = -1/-1`，shader 将其解释为 20:00–06:00。对于应全天可见且由几何动画控制状态的车辆显示表面，可显式设置 `params.emissive_scale.fragmentProperties[1].fromTime = 0`、`toTime = 24`，并验证白天/夜晚及动画开关。
+The installed `rendering/programs/shaders/mat/fs/normal/emissive.fs` discards entire emissive surfaces outside a time range. `properties/emissive_scale.prop.lua` in `rendering/properties.zip` defaults `fromTime/toTime` to `-1/-1`, interpreted by the shader as 20:00–06:00. For displays intended to remain visible all day with state controlled by geometry animation, explicitly set `params.emissive_scale.fragmentProperties[1].fromTime = 0` and `toTime = 24`, then verify day/night and animation switches.
 
-不能仅凭水牌空白就修改材质；截图中种别贴图正常、只有站名缺失时，先查动态标签。也不要因此把三代照亮地面的 SPOT 灯强制全天开启。用户随后确认本例车灯异常来自游戏加载，不能再把“车灯全部消失”作为已复现的材质故障证据。
+Do not edit materials based only on blank destinations. When the service-type texture is visible but station text is missing, check labels first. Do not force ground-illuminating TF3 SPOT lights on all day because of this display issue. The user later attributed this case's lamp anomaly to game loading, so “all lamps disappeared” is not a reproduced material-defect result.

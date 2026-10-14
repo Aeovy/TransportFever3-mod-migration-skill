@@ -1,68 +1,68 @@
 ---
 name: transport-fever-mod-migration
-description: "将 Transport Fever 2 资源或脚本模组迁移到 Transport Fever 3，诊断车辆、材质、Lua/Teal、React GUI 及 macOS/Windows 兼容问题。适用于实际迁移、脚本重写和迁移可行性评估。"
+description: "Migrate Transport Fever 2 asset or scripted mods to Transport Fever 3, diagnose vehicle, material, Lua/Teal, React GUI, and macOS/Windows compatibility issues, and assess migration feasibility."
 ---
 
-# 狂热运输二代 → 三代模组迁移
+# Transport Fever 2 to 3 Mod Migration
 
-产出独立的三代模组和可核实的迁移报告。以当前安装版本、官方文档和原包实际数据为依据。模型迁移必须在目标 Model Editor 中打开最终输出，实际查看加载贴图后的外观；纯脚本模组检查资源注册、回调、GUI、样式与状态，模型编辑器标记为“不适用”。不要将离线通过写成游戏或 Windows 已通过。
+Produce an independent TF3 mod and an evidence-based migration report. Use the installed game version, official documentation, and the actual source package as the basis for every decision. For model migrations, open the final output in the target Model Editor and inspect the appearance with textures loaded. For script-only mods, inspect resource registration, callbacks, GUI, styles, and state; mark Model Editor validation as not applicable. Never describe offline success as game or Windows success.
 
-## 开始工作
+## Getting Started
 
-1. 确认原包、目标游戏版本、工作目录，以及用户允许的验证范围。已有信息直接使用；缺少安装路径时先检查本机文件。用户要求不打开游戏时，继续离线处理，游戏验证标记为“未运行”。模型编辑器与主游戏分别判断是否允许使用。
-2. 盘点 `mod.lua`、`res/`、模型、材质、网格、贴图、编组和脚本，判断是资源模组还是包含运行逻辑的模组。保留原包，所有修复在副本中进行。
-3. 资源转换读取 [迁移流程](references/migration-workflow.md)。运行逻辑读取 [脚本职责与接口迁移](references/script-migration.md)；GUI 注册、节点或界面异常读取 [React GUI 与样式隔离](references/tf3-react-gui.md)；离线验证、回归和打包读取 [脚本验证与交付](references/script-validation.md)。按问题读取，避免把单个案例的实现细节当作所有脚本的转换规则。
-4. 遇到不可读文件、错贴图、车轴/LOD、缺失依赖、动态文字错位或编辑器异常时，读取 [故障排查](references/troubleshooting.md)。整片实体表面呈毛玻璃、背景可透过车壳，或实体与玻璃共用贴图时，另读 [透明度与材质分类](references/material-opacity.md)。遇到相似保护脚本或 CR200J 资源时，可参考 [CR200J 实例](references/cr200j-case-study.md)，其中的修复不是通用转换规则。
+1. Confirm the source package, target game version, work directory, and the validation scope the user permits. Use information already provided; if the install path is missing, inspect the local machine first. If the user does not want the game opened, continue offline and record game validation as `not run`. Treat Model Editor and the main game as separate permissions.
+2. Inventory `mod.lua`, `res/`, models, materials, meshes, textures, formations, and scripts. Decide whether the package is an asset mod or contains runtime logic. Preserve the original package and apply every fix in a copy.
+3. For asset conversion, read [Migration Workflow](references/migration-workflow.md). For runtime logic, read [Script Responsibilities and Interface Migration](references/script-migration.md); for GUI registration, node, or layout problems, read [TF3 React GUI and Style Isolation](references/tf3-react-gui.md); for offline validation, regression, and packaging, read [Script Validation and Delivery](references/script-validation.md). Read only the references relevant to the issue so that a case-specific implementation is not mistaken for a universal conversion rule.
+4. For unreadable files, incorrect textures, wheel or LOD errors, missing dependencies, misplaced dynamic text, or editor failures, read [Troubleshooting](references/troubleshooting.md). For frosted opaque surfaces, background visible through the body, or materials shared by opaque and glass regions, also read [Material Opacity and Classification](references/material-opacity.md). For similar protected scripts or CR200J assets, consult [the CR200J case study](references/cr200j-case-study.md); its fixes are not general conversion rules.
 
-可使用附带的只读盘点脚本，报告位置必须在原包之外：
+The included inventory script is read-only. Write its report outside the source package:
 
 ```sh
 uv run --with 'pydantic>=2.11,<3' python \
-  <skill目录>/scripts/inventory_mod.py /path/to/source_mod \
+  <skill directory>/scripts/inventory_mod.py /path/to/source_mod \
   --output /path/to/work/inventory.json --hash
 ```
 
-脚本检查目录布局、大小写/Unicode 路径冲突、同名 DDS/TGA、Lua 字节码、缺失网格伴随文件、文本编码及 DDS 头信息。它不执行 Lua、不解密、不修改原包，也不代替完整资源或游戏验证。`--hash` 可省略；启用时为原文件生成 SHA-256 快照。
+The script checks directory layout, case and Unicode path collisions, duplicate DDS/TGA names, Lua bytecode, missing mesh companions, text encoding, and DDS headers. It does not execute Lua, decrypt data, modify the source package, or replace full asset or game validation. `--hash` is optional; when enabled it records SHA-256 snapshots of source files.
 
-## 迁移的关键约束
+## Key Migration Constraints
 
-- 优先使用目标版本官方 Model Editor 的二代转换能力，再对照原包补齐元数据和依赖。先转换一个代表模型，核实输出目录与当前/目标模组，之后再批量转换。
-- 为最终资源建立明确的旧路径 → 新路径映射。先检测转换后的文件名冲突，再重命名和更新引用；文件名规范化不能同时改变动画、车轴引用的节点名称。
-- `.msh.blob` 是二进制网格容器，不等于加密。Lua 字节码与真正不可读取的几何资源分别处理。仅在网格布局可证明时替换保护辅助脚本计算出的常量；无法证明时保留阻碍并说明需要的源资源。
-- 同名 DDS 和 TGA 可能是不同涂装。转换前分配唯一目标名。纹理方向、法线格式、透明度和 mipmaps 必须按实际材质与工具链检查，不能对所有图片统一套用翻转或压缩策略。
-- 三代模组管理卡片读取 `_metadata/0.png`；二代 `image_00.*` 或 `workshop_preview.*` 必须单独迁移。封面缺失、卡片出现问号或准备打包时，读取 [模组封面迁移](references/mod-cover.md)，并区分管理页面封面与车辆购买图标。
-- 保留原车辆性能、编组数量及朝向，除非用户要求调整。缺失贴图/音效的替代方案要写入报告。涉及仿真逻辑的 Lua 脚本按三代接口重新适配，不能仅移动文件或改扩展名。
-- 电子水牌的种别贴图与动态目的地可能来自两套互补资源；不能因存在滚动水牌网格/贴图就删除整个 `metadata.labelList`。保留并适配负责站名的 `NEXT_STOP`，只处理已确认不需要的 `NAME` 等标签。遇到站名空白、错位或车体上出现车辆名时，读取 [动态目的地标签](references/destination-labels.md)，核查最终包、原生布局尺寸、节点绑定和实际网格。
-- Teal 的类型名不是运行时模块变量；普通 React recipe 的布局根节点与原生窗口 wrapper 分别处理；TF3 样式类选择器使用 `!`。Lua 语法检查不能发现这些宿主契约或样式作用域问题，见 GUI 参考中的实际错误案例。
-- macOS 生成的纯资源包通常可供 Windows 使用，但编辑器检查不能证明 Windows 运行结果。检查大小写、包内路径、版本依赖及平台程序/插件，实际未运行的项目明确标记。
-- Transport Fever 3 的夜间原生照明是三代特性。二代模组中的灯罩、发光贴图或 `emissive` 材质只表示车灯“在发光”，不会自动产生照亮地面的光束；从二代迁移时必须把夜间照明作为独立适配项，不能把材质迁移通过当作照明迁移完成。
-- 最终材质或贴图修改完成后，必须重新在 Model Editor 中打开最终输出目录中的模型，并观察已加载贴图的车体、车厢内部、玻璃、灯光和代表性 LOD；至少覆盖每个编组及每种不同材质/涂装，若模型数量较少则逐个查看。只读取 `.mdl`、检查路径或看到转换日志不能替代这个视觉检查。
+- Prefer the target Model Editor's official TF2 conversion support, then compare the result with the source package to restore metadata and dependencies. Convert one representative model first, verify the output directory and current/target mod, and only then convert in bulk.
+- Build an explicit old-path to new-path map for final assets. Detect converted filename collisions before renaming and updating references. Filename normalization must not change animation or wheel-node names.
+- `.msh.blob` is a binary mesh container, not proof of encryption. Handle Lua bytecode and genuinely unreadable geometry separately. Replace constants computed by a protected helper only when the mesh layout proves the replacement; otherwise preserve the blocker and state which source assets are required.
+- Same-named DDS and TGA files may be different liveries. Assign unique target names before conversion. Check orientation, normal encoding, alpha, and mipmaps according to the actual material and toolchain; do not apply one flip or compression policy to every image.
+- TF3 mod cards read `_metadata/0.png`; TF2 `image_00.*` and `workshop_preview.*` need explicit migration. When the cover is missing, the card shows a question mark, or a package is being prepared, read [Mod Cover Migration](references/mod-cover.md), and distinguish the management-page cover from vehicle purchase icons.
+- Preserve vehicle performance, formation length, and facing unless the user requests a change. Disclose substitutes for missing textures or sounds. Adapt simulation Lua to the TF3 interfaces; moving files or changing extensions is insufficient.
+- Destination displays may combine livery textures with dynamic destinations. Do not delete `metadata.labelList` merely because a scrolling display mesh or texture exists. Preserve and adapt `NEXT_STOP`, and remove `NAME` or other labels only when their role is confirmed. For blank, misplaced, or vehicle-name text, read [Dynamic Destination Labels](references/destination-labels.md) and inspect the final package, native layout dimensions, node binding, and actual mesh.
+- Teal type names are not runtime module variables. Handle ordinary React recipe roots and native window wrappers separately. TF3 style class selectors use `!`. Lua syntax checks cannot find host-contract or style-scope errors; see the GUI reference for concrete failures.
+- A pure asset package produced on macOS may work on Windows, but editor validation cannot prove Windows runtime behavior. Check case, package paths, version dependencies, and platform-specific programs or plugins, and clearly mark unrun platforms.
+- TF3 night lighting is a native feature. A TF2 lamp cover, emissive texture, or `emissive` material only makes the lamp appear to glow; it does not create a beam on the ground. Treat night lighting as a separate migration item and do not count material conversion as lighting migration.
+- After changing materials or textures, reopen the final models from the output directory in Model Editor and inspect the loaded appearance of the body, interior, glass, lights, and representative near/far LODs. Cover every formation and each distinct material or livery, or inspect every model when the set is small. Reading `.mdl` files, checking paths, or seeing a conversion log is not a visual inspection.
 
-## 三代夜间灯光适配
+## TF3 Night-Light Adaptation
 
-迁移包含车灯的二代车辆时，单独完成以下步骤并在报告中记录覆盖范围：
+For TF2 vehicles with lamps, complete these steps separately and record the coverage:
 
-1. 找出真正的动力车头、前照灯网格节点及对应的开灯/关灯动画。灯光应挂在实际车灯位置，并绑定已有的前向车灯状态；不要仅在车体根节点添加一个与模型无关的光源。
-2. 在最终 `.mdl` 中加入三代原生 `SPOT` / `LIGHT` 光源，设置合理的方向、距离、强度、聚光角和包围盒。光源应使用三代的夜间或恶劣天气条件，并与 `front_forward_parts_on/off` 或等价动画同步；参数必须根据车辆尺寸和 Model Editor 预览调整，不能照搬某个车型的数值。
-3. 分别在夜间开灯和关灯状态打开最终输出目录的模型：开灯时确认前方地面出现光束，关灯时确认光束消失，同时检查灯罩发光材质、车体透明度和远近 LOD 没有回归。至少覆盖每种动力车头、涂装或不同灯光定义；无法打开编辑器时标记为“未运行”。
-4. 报告中区分“发光材质”与“实际照明”，列出适配的模型/光源数量、动画绑定、主要参数、开关灯截图或日志，以及主游戏和 Windows 是否实际验证。没有实际光束证据时，不得将夜间灯光写成“已完成”。
+1. Find the actual powered cab, headlight mesh nodes, and existing on/off animations. Attach lights at the real lamp positions and bind them to the existing forward-light state; do not add an unrelated light to the body root.
+2. Add TF3 native `SPOT` / `LIGHT` sources to the final `.mdl`, with plausible direction, range, intensity, cone, and bounds. Use TF3 night or bad-weather conditions and synchronize with `front_forward_parts_on/off` or the equivalent animation. Tune values to vehicle size in Model Editor rather than copying numbers from another vehicle.
+3. Open the final output in both night-on and night-off states. Confirm a forward beam appears and disappears, and check the lamp material, body opacity, and near/far LODs for regressions. Cover each powered cab, livery, or distinct light definition; record `not run` when the editor cannot be opened.
+4. In the report, distinguish an emissive material from actual illumination. List adapted models and light sources, animation bindings, key parameters, on/off screenshots or logs, and whether the main game and Windows were tested. Without beam evidence, do not call night lighting complete.
 
-## 验证与交付
+## Validation and Delivery
 
-按用户允许的范围逐层记录结果，使用“通过 / 失败 / 未运行”；部分覆盖另写覆盖范围：
+Record each permitted layer as `passed / failed / not run`, and state partial coverage separately:
 
-| 层级 | 需要的证据 |
+| Layer | Required evidence |
 | --- | --- |
-| 模组展示检查 | 最终 `_metadata/0.png` 的解码、包内路径及主游戏模组卡片截图；未运行主游戏时单独记录 |
-| 静态检查 | 定义与编码、资源引用、网格索引、贴图格式、编组及必要脚本检查 |
-| 动态标签与电子水牌 | 对照源/成品的 `NEXT_STOP` 数量，检查尺寸、变换、节点绑定及水牌矩形；保留种别贴图和动画。编辑器检查落点，游戏在线路有下一站时检查站名及更新；几何检查不能替代渲染结果 |
-| 脚本离线检查 | Lua/Teal 的实际检查范围、资源入口、限定宿主回调、节点结构与实际样式解析；不代替原生 GUI 渲染 |
-| 编辑器检查 | 在最终输出目录上查看加载贴图后的模型；覆盖编组、不同材质/涂装、车体、内部、玻璃、灯光和代表性 LOD；保存路径、版本、截图或日志。纯脚本模组标记“不适用” |
-| 游戏检查 | 实际启用、购买/运行、交互、存档与脚本生命周期结果 |
-| Windows 检查 | 目标版本下的实际加载与运行结果 |
+| Mod presentation | Decoded final `_metadata/0.png`, package path, and a main-game mod-card screenshot; record separately when the main game was not run |
+| Static checks | Definitions and encoding, resource references, mesh indices, texture formats, formations, and required script checks |
+| Dynamic labels and displays | Source/final `NEXT_STOP` counts, dimensions, transforms, node bindings, and display rectangles; preserve livery textures and animation. Check placement in the editor and station-name updates on a line with a next stop; geometry checks do not replace rendering |
+| Offline script checks | Actual Lua/Teal scope, resource entry points, constrained host callbacks, node structure, and style parsing; these do not replace native GUI rendering |
+| Editor checks | Inspect final models with textures loaded from the output directory; cover formations, distinct materials/liveries, body, interior, glass, lights, and representative LODs; save paths, version, screenshots, or logs. Mark script-only mods not applicable |
+| Game checks | Actual enablement, purchase/run, interaction, saves, and script lifecycle |
+| Windows checks | Actual loading and runtime behavior on the target version |
 
-纯资源包无需强行增加运行脚本；有脚本的模组保留合法模块依赖。LOD 性能错误也是验证失败，不能通过隐藏日志或删除远景层级宣称通过。
+Do not add runtime scripts to a pure asset package. Preserve valid module dependencies in scripted mods. LOD performance errors are validation failures; hiding logs or deleting distant levels does not make them pass.
 
-交付时包含：独立模组目录、可安装 ZIP、CRC/SHA-256 校验、迁移报告。报告说明原包保留情况、依赖/替代资源、适用的 Model Editor 视觉证据、已验证范围、未解决问题和继续操作方法。模型迁移若被禁止打开编辑器或无法渲染，标为“未运行”，不能宣称迁移已完成；脚本原生界面或生命周期未经游戏实测，也保留待测状态。有 Git 的项目按实质阶段提交工具及文本定义；二进制是否入库遵循项目约定。迁移请求不包含向 Mod Hub、mod.io 或其他平台发布的授权。
+Deliver the independent mod directory, installable ZIP, CRC/SHA-256 checks, and migration report. The report must state what happened to the original package, dependencies and substitutes, applicable Model Editor evidence, tested scope, unresolved issues, and next steps. If model migration could not be rendered or the editor was disallowed, mark it `not run` rather than complete. Keep native GUI and lifecycle work pending when it was not tested in game. In Git projects, commit substantive tool and text-definition stages; follow project conventions for binaries. A migration request does not authorize publishing to Mod Hub, mod.io, or another platform.
 
-支持资料按实际问题读取。参考资料最后核对于 2026-10-04；使用时核实本机版本，尤其是编辑器输出位置、脚本签名和校验阈值。
+Read supporting references only when their issue applies. References were last checked on 2026-10-04; verify the local version when using them, especially editor output locations, script signatures, and validation thresholds.

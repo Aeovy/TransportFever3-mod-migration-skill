@@ -1,25 +1,25 @@
-# 模组管理页面的封面迁移
+# Mod Management Cover Migration
 
-最后核对：2026-10-06；官方 Mod Definition 文档及本机三代内置模组。
+Last checked: 2026-10-06, against official Mod Definition documentation and locally installed TF3 mods.
 
-TF3 的网格卡片使用模组根目录下的 `_metadata/0.png`；详情页可使用 `1.png`、`2.png` 等编号图片。官方建议尺寸为 1920×1080。二代的根目录 `image_00.tga`、`image_00.jpg` 和 `workshop_preview.jpg` 不会自动替代这项三代展示资源。即使模型、购买图标和 `_metadata/modinfo.json` 全部有效，卡片仍可能显示问号。
+TF3 grid cards use `_metadata/0.png` under the mod root. Detail pages can use numbered images such as `1.png` and `2.png`. The recommended size is 1920×1080. TF2 root images such as `image_00.tga`, `image_00.jpg`, and `workshop_preview.jpg` do not automatically replace this TF3 presentation asset. A card may show a question mark even when models, purchase icons, and `_metadata/modinfo.json` are valid.
 
-## 修复与迁移
+## Repair and Migration
 
-1. 在原包中查找 `image_00.*`，缺少时查看 `workshop_preview.*`；检查实际图片内容，合并包应选用能代表最终内容的原图。保留作者文字与标识，不用生成图代替已有封面。原包没有图片时可使用已获授权的实际模型截图；若仍缺少合适来源，在报告中注明。
-2. 将图片真正解码并保存为 `_metadata/0.png`，不能仅改扩展名，也不放到 `content/_metadata/`。保持比例，非 16:9 图片用留边，避免裁掉文字或拉伸车体。工具只执行格式/尺寸转换，不创作新画面：
+1. Find `image_00.*` in the source, then `workshop_preview.*` if missing. Inspect the image and choose one representative of the final contents for merged packages. Preserve author text and marks; do not generate a replacement for an existing cover. If the source has no image, use an authorized screenshot of the actual model or report the missing source.
+2. Decode and save the image as `_metadata/0.png`; changing the extension is insufficient, and `content/_metadata/` is the wrong location. Preserve aspect ratio and pad non-16:9 images instead of cropping text or stretching vehicles. The helper converts format and size without generating new imagery:
 
    ```sh
    uv run --with 'pydantic>=2.11,<3' --with 'pillow>=11,<13' python \
-     <skill目录>/scripts/migrate_cover.py \
+     "$skill_root/scripts/migrate_cover.py" \
      --source /path/to/original_tf2_mod --mod /path/to/final_tf3_mod \
      --report /path/to/work/cover.json
    ```
 
-   需要指定某张原图时，用 `--image /path/to/existing/image` 替换 `--source`。
-3. 重新解码最终 PNG，核对它的尺寸、SHA-256 和 ZIP 成员路径。封面更新时提升成品 `revision`，保持 `modId` 和车辆/脚本资源。`package_mod.py` 默认阻止可见模组遗漏封面；确实无法提供的例外可以用 `--allow-missing-cover`，并在报告中说明。隐藏的辅助模组无需强行增加封面。
-4. 在用户允许的范围内，打开实际主游戏的模组网格页面检查卡片和需要的详情页。Model Editor 的车辆购买图标不能证明管理页面封面显示正常。记录截图及版本；未打开主游戏时标为“未运行”。若仍显示旧问号，重新启动游戏并检查 `staging_area` 的同 ID 副本、实际加载位置及图片大小写。不要用删除存档或全量缓存作为首选修复。
+   Set `skill_root` to this skill's directory. To choose a specific source image, replace `--source` with `--image /path/to/existing/image`.
+3. Decode the final PNG again and verify dimensions, SHA-256, and ZIP member path. Increment the output revision when updating the cover, preserving `modId` and vehicle/script assets. `package_mod.py` blocks missing covers for visible mods by default; use `--allow-missing-cover` only for an explained exception. Hidden helper mods do not need an unnecessary cover.
+4. Within the permitted scope, inspect the real main-game mod grid and relevant detail pages. Model Editor purchase icons do not prove management-card rendering. Record screenshots/version, or `not run`. For stale question marks, restart and check same-ID `staging_area` copies, actual load location, and filename case. Do not begin by deleting saves or all caches.
 
-已有包只缺封面时，可交付仅含 `modId/_metadata/0.png` 的合并补丁，明确它不是完整模组；不要让用户把补丁空壳文件夹当成可单独启用的模组。同步更新完整 ZIP、CRC/SHA-256 和报告，并核对旧包中除版本字段外的文件没有意外变化。
+For a package missing only its cover, a merge patch containing `modId/_metadata/0.png` is acceptable if clearly labeled as incomplete and not independently enableable. Update the full ZIP, CRC/SHA-256, and report too, and confirm other files are unchanged apart from revision metadata.
 
-官方依据：[Mod Definition](https://wiki.transportfever3.com/doku.php?id=modding:general:moddefinition)。
+Official source: [Mod Definition](https://wiki.transportfever3.com/doku.php?id=modding:general:moddefinition).

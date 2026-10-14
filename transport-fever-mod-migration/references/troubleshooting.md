@@ -1,81 +1,81 @@
-# 迁移故障排查
+# Migration Troubleshooting
 
-按症状选择小节。以下处理均需从源文件或目标版本日志确认，不能把一个包的修复公式用于所有包。
+Choose a section by symptom. Confirm each diagnosis from source files or target-version logs. A repair formula from one package must not become a rule for every package.
 
-## 模型“加密”或描述符无法加载
+## “Encrypted” Models or Unloadable Descriptors
 
-先查看文件头与引用关系：可读 `.mdl/.msh/.mtl`、标准 `.msh.blob`、Lua 字节码辅助模块、真正无法解析的几何数据分别处理。二进制 blob 不是加密证据。源模型若可由官方工具读取，先走官方转换；无法读取真实几何且无可用源文件时，记录阻碍并说明需要作者提供什么资源。
+Inspect headers and references. Distinguish readable `.mdl/.msh/.mtl`, standard `.msh.blob`, Lua bytecode helpers, and genuinely unparseable geometry. A binary blob is not evidence of encryption. If official tools can read the source, use their converter first. If real geometry is unreadable and no source is available, record the blocker and specify what the author must supply.
 
-重建脚本算出的索引偏移时，需要完整验证：索引类型/字节序、每个索引区 offset/count/size、非预期重叠、顶点分量数量，以及所有索引上界。只验证“没越界”仍可能把 UV 指向错误索引区，必须预览贴图定位。未知布局不填一个看似能加载的默认值。CR200J 的具体布局见实例。
+Reconstructing script-calculated offsets requires index type/endianness, each region's offset/count/size, unintended overlap, vertex-component counts, and every index bound. In-range UV indices can still point into the wrong region, so preview texture placement. Never fill an unknown layout with a guessed value just because it loads. See [CR200J](cr200j-case-study.md) for that case's proven layouts.
 
-## 找不到模型、网格、音效或法线
+## Missing Models, Meshes, Sounds, or Normals
 
-确认资源引用基准、命名空间、实际大小写和物理扩展名。网格一般需要描述符及对应 `.msh.blob`；遇到同名 `.blob` 候选先核实确实匹配，不直接复制任意近似文件。原版资源可能位于资源包，先检查其目录和资源别名，不能仅靠 `Path.exists()` 判定缺失。
+Check reference bases, namespaces, exact case, and physical extensions. Meshes normally need a descriptor and its `.msh.blob`; verify a same-named `.blob` candidate actually matches before copying it. Native resources may live in archives; inspect members and aliases instead of deciding they are missing solely through `Path.exists()`.
 
-检查旧包是否遗漏所依赖模组。引用 `other_mod::/path` 的合法外部资源应保留真实依赖；若没有原资源，只有在用途明确、范围允许时用相容原版资源替代，并写出差异。节点名称、文件引用和 UI 本地化键是三种不同标识符，不能混合规范化。
+Check whether the old package omitted a dependent mod. Retain legitimate dependencies for `other_mod::/path` references. If the source is unavailable, use a compatible native substitute only when its purpose is clear and within scope, and disclose differences. Node names, file references, and UI localization keys are distinct identifiers and must not be normalized together.
 
-## 某套涂装变成另一套或贴图上下颠倒
+## Swapped Liveries or Upside-Down Textures
 
-先比较源包同目录同名 DDS/TGA，它们可能不是备份，而是不同涂装。为各输入分配唯一输出名，如 `body.dds` 与 `body_from_tga.dds`，再更新材质映射。扩展名转换及小写化之前必须检查冲突，不能先覆盖后排查。
+Compare same-directory, same-name DDS and TGA source files. They may be different liveries rather than backups. Assign unique outputs such as `body.dds` and `body_from_tga.dds`, then update materials. Detect collisions before extension conversion or lowercasing, not after overwriting files.
 
-TGA 的 origin flag 与 DDS 在游戏/导出工具中的 UV 方向约定有关。Pillow 解码 TGA 时已处理 origin；CR200J 的 TGA → DDS 流程还需要上下翻转才能匹配三代 DDS 约定。已有 DDS 不随之再翻转，其他工具链先对照参考模型、文字、条带和 UV 岛验证。法线绿色通道是否反转是另外一个坐标系问题，不能因为上下翻转就同时改通道。
+TGA origin flags interact with game/export-tool UV conventions. Pillow already handles the origin flag during decoding; the CR200J TGA-to-DDS pipeline additionally needed a vertical flip to match TF3 DDS orientation. Existing DDS files were not flipped. For other toolchains, verify reference models, text, stripes, and UV islands. Normal-map green-channel inversion is a separate coordinate-system issue and must not be assumed necessary because an image was flipped.
 
-## DDS 能预览，但编辑器报格式/mipmap 错误
+## DDS Previews Work but the Editor Reports Format/Mipmap Errors
 
-根据实际纹理角色和 shader 确定压缩。BC5 法线需要核实 UNORM/SNORM 和法线编码，例如 DXGI 83 是 BC5 UNORM；透明资源需要保留 alpha，不透明资源可以使用适合的不透明格式。MGA 各通道语义必须与 shader 一致，源数据若为 roughness 而目标要 gloss 才考虑反转该通道。
+Choose compression by actual texture role and shader. For BC5 normals, verify UNORM/SNORM and normal encoding; for example, DXGI 83 is BC5 UNORM. Transparent assets must preserve alpha. Opaque assets can use an appropriate opaque format. MGA channel semantics must match the shader; consider inversion only when the source provides roughness and the target expects gloss.
 
-普通完整 2D mip 链数量为 `floor(log2(max(width, height))) + 1`，包含 1×1。检查 DDS magic、头长、FourCC/DX10、尺寸、mip 数以及每层实际数据长度；只看扩展名或第一级预览不足以确认编码有效。盘点脚本仅检查头与数量，不证明完整有效。优先让官方编辑器转换和保存；自写编码器需实际比较输出并在目标编辑器验证。
+A full ordinary 2D mip chain contains `floor(log2(max(width, height))) + 1` levels, including 1×1. Inspect magic, header size, FourCC/DX10, dimensions, mip count, and actual per-level payload size. An extension or top-level preview cannot prove valid encoding. The inventory script checks headers/counts only. Prefer official conversion/save; custom encoders require output comparison and target-editor validation.
 
-## 电子水牌目的地空白、错位或车身出现车辆名
+## Blank/Misplaced Destinations or Vehicle Names on the Body
 
-先区分种别贴图、动态站名与车辆名称。E2/E5/E6/H5 的原始滚动贴图留有站名空白区，目的地依赖 `labelList` 中的 `NEXT_STOP`；删除整个列表会直接造成“种别正常、目的地消失”。旧版“有水牌资源就删除 labelList”的建议已撤回。
+Distinguish service-type textures, dynamic station names, and vehicle names. E2/E5/E6/H5 scrolling textures leave blank station areas filled by `NEXT_STOP` in `labelList`. Deleting the list preserves the service type and removes destinations. Earlier advice to delete labels whenever display assets exist has been withdrawn.
 
-检查原包和最终包的标签数量、三代原生布局尺寸、车体节点绑定与实际水牌网格。完整诊断、转换方法、原包坐标错误实例及验证边界见 [动态目的地标签](destination-labels.md)。不要用水牌网格仍存在或文件能加载作为动态目的地功能通过的证据。
+Compare source/final label counts, native layout dimensions, body-node binding, and actual display meshes. See [Dynamic Destination Labels](destination-labels.md) for conversion, source-coordinate defects, and validation limits. A surviving display mesh or loadable file does not prove dynamic destinations work.
 
-## CR400AF 校验同时报音频、占位纹理和默认贴图错误
+## CR400AF: Audio, Placeholder Textures, and Default-Map Errors Together
 
-CR400AF 迁移中曾出现一组可复用的组合症状：所有 WAV 报 `44100 Hz` 而目标要求 `48000 Hz`；原二代 `.pkf` 被三代文件扩展名校验拒绝；大量车辆纹理变成 `2x2` 且只有一个 mipmap；材质反复报缺少 `/res/textures/default_normal_map.dds` 和 `default_metal_gloss_ao.tga`。这些错误通常来自迁移脚本复制了 Model Editor 暂存目录中的占位 DDS，同时把二代音频容器原样带入输出包，而不是模型本身损坏。
+This migration exposed a combined symptom pattern: every WAV reported `44100 Hz` where `48000 Hz` was required; TF2 `.pkf` files failed extension checks; many vehicle textures became `2x2` with one mip; and materials repeatedly lacked `/res/textures/default_normal_map.dds` and `default_metal_gloss_ao.tga`. This commonly indicated placeholder DDS files copied from Model Editor staging alongside unchanged TF2 audio-container files, rather than damaged model geometry.
 
-按以下顺序修复并重新生成包：
+Repair and rebuild in this order:
 
-1. 以原包中的同名 DDS 与暂存文件比较尺寸和 DDS 头；源文件明显更大且有完整 mip 链时，优先复制源纹理。候选输入按“族名 + 规范化文件名”去重，不能让暂存占位文件覆盖真实涂装。
-2. 对最终包内每个 DDS 检查 magic、宽高、FourCC/DX10、实际数据长度和 mip 数。普通 2D 链应为 `floor(log2(max(width, height))) + 1`，且至少达到目标编辑器的最小尺寸；不要只修改头字段而留下不足的 payload。若 `map_cblend_dirt_rust` 对应不透明纹理，按当前校验器要求使用 BC1/DXT1；其他法线、透明和 MGA 纹理仍按材质语义选择格式。
-3. 将 PCM WAV 重采样为 `48000 Hz` 后再写入包，并删除校验器禁止的 `.pkf`。同步检查 `.snd.lua` 的文件名与输出样本一致；不要通过改扩展名伪装 `.pkf`。
-4. 对材质明确解析 `/res/textures/...` 的包根资源与 `::/vehicle/shared/...` 的原版依赖。缺少默认贴图时，在包根 `res/textures/` 提供可解码的 fallback，并在最终输出清理旧的 `content/res/` 或其他残留目录，避免同名错误资源再次被打包。
-5. 重新运行编辑器校验，并在离线阶段检查：无 `.pkf`、所有 WAV 为 48 kHz、DDS 尺寸/mip/格式满足目标版本、所有本地 MTL 引用可解析、ZIP CRC 和 SHA-256 通过。编辑器、游戏和 Windows 没有实际运行时，分别记录为“未运行”。
+1. Compare source DDS dimensions/headers with staged counterparts. Prefer real source textures when substantially larger with full mip chains. Deduplicate candidates by asset family plus normalized filename; staged placeholders must not overwrite liveries.
+2. Inspect every final DDS for magic, dimensions, FourCC/DX10, actual payload length, and mip count. Ordinary 2D chains need `floor(log2(max(width, height))) + 1` levels and the editor's minimum dimensions. Do not change headers without sufficient payload. For opaque `map_cblend_dirt_rust`, use BC1/DXT1 when required by the current validator; choose normal, transparent, and MGA formats by their semantics.
+3. Resample PCM WAV to `48000 Hz` before packaging and remove rejected `.pkf` files. Match `.snd.lua` filenames to output samples; do not disguise `.pkf` by renaming extensions.
+4. Resolve package-root `/res/textures/...` separately from native `::/vehicle/shared/...` dependencies. Supply decodable missing-map fallbacks at package-root `res/textures/`, and remove obsolete `content/res/` or other leftover output trees so incorrect same-name resources are not repackaged.
+5. Rerun editor validation. Offline, check no `.pkf`, all WAV at 48 kHz, valid target DDS dimensions/mips/formats, resolvable local MTL references, ZIP CRCs, and SHA-256. Mark editor, game, and Windows individually `not run` where applicable.
 
-该故障的修复应写入可重复的构建脚本；不要只在一次生成的 ZIP 中替换二进制文件。若迁移脚本复用工作区暂存目录，构建开始时清理旧输出，并把封面、默认贴图和依赖族显式纳入输出清单。
+Put the repair in a repeatable build script rather than patching binaries in a single ZIP. When staging directories are reused, clean stale output at build start and include covers, default maps, and dependency families explicitly in the output inventory.
 
-## 透明玻璃、门窗或灯光错误
+## Incorrect Glass, Doors/Windows, or Lamps
 
-对照源材质角色、shader、alpha 和双面/排序规则。CR200J 某些透明 PHYS 材质需要 alpha 和排序，但不能给全部材质统一加 `sorted=true`。官方转换可能保留兼容旧外观的标志，不因名称含 legacy 就无条件删除。生成通用白贴图只是缺失通用白色灯光资源的一种替代，不能替代真实涂装、法线或重要遮罩。
+Compare source material roles, shader, alpha, two-sided settings, and sorting. Some CR200J transparent PHYS materials needed alpha and sorting, but setting `sorted=true` everywhere is wrong. Official conversion may preserve flags for legacy appearance; do not remove them solely because their names include legacy. A generic white fallback only substitutes a missing generic white lamp texture, not real livery, normals, or important masks.
 
-整片实体表面像毛玻璃或能透过车壳看到背景时，先按 mesh 实际引用追到材质，比较源包/成品 alpha、shader、map/sampler 和排序/深度写入配置。若该表面应为实体，使用对应的不透明 shader 时要同时改为 `map_albedo` + `albedoTex`，不能只替换材质 `type`；保留仍使用的法线与 MGA 引用。`sorted` 只控制透明物排序，不会把透明 shader 变成实体。混合 atlas 不要盲目去 alpha 或一律改 shader；先判断窗口是否独立网格/材质，并在目标平台实测。具体诊断步骤和已在 Windows 验证的 CR200J 案例见[透明度与材质分类](material-opacity.md)。
+For frosted solid bodies or background visibility, follow actual mesh references to the material. Compare source/final alpha, shader, map/sampler, sorting, and depth-write settings. When changing a solid surface to an opaque shader, also use `map_albedo` + `albedoTex`; changing only `type` leaves incompatible bindings. Retain required normals/MGA. `sorted` does not turn a transparent shader opaque. For mixed atlases, first determine whether glass has separate meshes/materials; do not blindly strip alpha or replace every shader. Test on the affected platform. See [Material Opacity](material-opacity.md) for diagnosis and the Windows-verified CR200J case.
 
-## 车轴或动画在某个 LOD 报错
+## Wheel or Animation Errors at One LOD
 
-检查转换后每层节点树和动画的节点引用，而不是旧网格路径。针对参与变换的层级计算 `skipFromLod`，零基索引代表第一层被排除的 LOD；禁止硬编码某个数值到所有模型。某层缺少节点时优先判断其预期动画行为，修改之后预览轮轴、门和车端连接。
+Inspect converted node trees and animation references at each level rather than old mesh paths. Derive `skipFromLod` from the participating hierarchy; its zero-based index identifies the first excluded level. Do not hardcode one value for every model. When nodes are absent, establish expected behavior first, then preview wheels, doors, and inter-car connections after repair.
 
-最远 LOD 网格过大需要制作简化几何，不能靠改 cutoff 或跳过验证解决。实际阈值由目标版本给出；CR200J 在 v13 遇到 256 KB 限制，只作为该版本证据。
+Oversized farthest-LOD meshes require simplified geometry, not a changed cutoff or skipped validation. Use the target version's threshold; CR200J's 256 KB limit is evidence specifically from v13.
 
-## 编辑器转换写到错误模组，或看不到刚修改的材质
+## Conversion Writes to the Wrong Mod or Material Changes Stay Invisible
 
-核实当前工具栏模组和 Tools 的 Target Mod，再用一个模型检查真实输出。CR200J 的 v13 转换曾写入当前模组，应作为兼容性观察处理，不能假设所有版本都存在这个问题。
+Verify the current toolbar mod and Tools Target Mod with one actual conversion. CR200J v13 wrote to the current mod; treat this as an observed compatibility issue, not universal behavior.
 
-资源缓存可能保留旧材质。先确认磁盘内容和引用确已更新，再重新打开模型；仍不更新时保存工作、关闭并重启编辑器一次。动画循环开关不会刷新材质。保存日志与版本，避免盲目反复覆盖资源。
+Cached resources may retain old materials. Confirm disk content and references first, then reopen the model. If still stale, save work and restart the editor once. Animation looping does not reload materials. Keep version/log evidence instead of repeatedly overwriting assets without diagnosis.
 
-## Bulk Validation 断言或崩溃
+## Bulk Validation Assertion or Crash
 
-CR200J 在 v13 已打开模型时遇到 `m_modelId < 0` 断言；重启编辑器并保持没有模型打开后，批量校验完成。这说明那次工具故障不是模型解析失败。先读当前日志，只有症状匹配时才尝试该恢复；若合理重试仍复现，记录工具限制并继续独立离线检查，不无限循环，不把崩溃当作资源通过。
+CR200J v13 asserted `m_modelId < 0` with a model open. Restarting with no model loaded allowed bulk validation to finish, indicating a tool-state failure in that run. Read current logs and use this recovery only for matching symptoms. If a reasonable retry repeats the failure, record the tool limitation and continue independent offline checks. Do not retry indefinitely or count a crash as an asset pass.
 
-## macOS 正常而 Windows 出错
+## Works on macOS, Fails on Windows
 
-检查目标版本、依赖来源、文件名完全一致、ZIP 路径/编码、非 ASCII 或空格资源名、硬编码本机绝对路径，以及 DLL/原生工具/字节码要求。开发机大小写不敏感的文件系统容易隐藏错误，即使两平台通常不区分大小写也应遵守资源精确匹配规则。报告必须区别“路径检查通过”和“Windows 实际运行通过”。
+Check target versions, dependency sources, exact filenames, ZIP paths/encoding, non-ASCII or spaced names, hardcoded local paths, and DLL/native-tool/bytecode requirements. A case-insensitive development filesystem can hide mistakes; retain exact resource matching even if both platforms are commonly case-insensitive. Distinguish passed path checks from actual Windows runtime success.
 
-## 官方依据
+## Sources
 
-- [编辑器转换和验证](https://wiki.transportfever3.com/doku.php?id=modding:tools:modeleditor)
-- [Blender 工具与 DDS 纹理方向](https://wiki.transportfever3.com/doku.php?id=modding:tools:external:blender)
-- [资源规则和路径](https://wiki.transportfever3.com/doku.php?id=modding:general:resourcetypes)
+- [Model Editor conversion and validation](https://wiki.transportfever3.com/doku.php?id=modding:tools:modeleditor)
+- [Blender tools and DDS orientation](https://wiki.transportfever3.com/doku.php?id=modding:tools:external:blender)
+- [Resource rules and paths](https://wiki.transportfever3.com/doku.php?id=modding:general:resourcetypes)
 
-局部修复与编辑器 v13 异常来自 `cr200j-case-study.md` 的本地实测，不作为官方通用行为。
+Case-specific repairs and v13 anomalies come from [local CR200J testing](cr200j-case-study.md), not universal official behavior.
